@@ -20,5 +20,7 @@ func SetupRouter() *gin.Engine {
 	router.POST("/api/room/create", handleTwilioRoomCreation)
 	router.POST("/api/room/connect", handleTwilioTokenCreation)
 
+	router.POST("/api/status/composition", handleCompositionCallback)
+
 	return router
 }
