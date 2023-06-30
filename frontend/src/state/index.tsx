@@ -7,6 +7,7 @@ import useFirebaseAuth from './useFirebaseAuth/useFirebaseAuth';
 import { useLocalStorageState } from '../hooks/useLocalStorageState/useLocalStorageState';
 import usePasscodeAuth from './usePasscodeAuth/usePasscodeAuth';
 import { User } from 'firebase/auth';
+import axios from 'axios';
 
 export interface StateContextType {
   error: TwilioError | Error | null;
@@ -91,20 +92,12 @@ export default function AppStateProvider(props: React.PropsWithChildren<{}>) {
   } else {
     contextValue = {
       ...contextValue,
-      getToken: async (user_identity, room_name) => {
+      getToken: async (user, roomId) => {
         const endpoint = process.env.REACT_APP_TOKEN_ENDPOINT || '/token';
 
-        return fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_identity,
-            room_name,
-            create_conversation: process.env.REACT_APP_DISABLE_TWILIO_CONVERSATIONS !== 'true',
-          }),
-        }).then(res => res.json());
+        return axios
+          .post('/api/room/connect', { roomId, user })
+          .then(res => ({ room_type: 'group', token: res.data.token }));
       },
       updateRecordingRules: async (room_sid, rules) => {
         const endpoint = process.env.REACT_APP_TOKEN_ENDPOINT || '/recordingrules';
