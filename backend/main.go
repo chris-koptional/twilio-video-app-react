@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
+	"server/cloud"
 	handler "server/handlers"
-	"server/queue"
 	"server/twilio"
 
 	"github.com/joho/godotenv"
@@ -20,19 +20,27 @@ type RoomRequest struct {
 
 func main() {
 	godotenv.Load()
-	taskClient, err := queue.CreateClient()
+	taskClient, err := cloud.CreateClient()
 
 	if err != nil {
-		log.Fatalln("Failed to create GCP Cloud task client")
+		log.Println("Failed to create GCP Cloud task client")
 	}
 	defer taskClient.Close()
 
 	twilioClient := twilio.InitTwilioClient()
 
+	storageClient, err := cloud.CreateStorageClient()
+
+	if err != nil {
+		log.Println("Failed to create GCP Cloud task client")
+	}
+	defer storageClient.Close()
+
 	// setup all of the routes
 	r := handler.SetupRouter(
 		taskClient,
 		twilioClient,
+		storageClient,
 	)
 
 	// Start the server

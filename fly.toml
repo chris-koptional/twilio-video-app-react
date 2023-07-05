@@ -1,6 +1,6 @@
-# fly.toml file generated for knotion-adhoc on 2023-06-29T17:17:51-03:00
+# fly.toml file generated for knotion-meetings on 2023-07-02T21:43:46-03:00
 
-app = "knotion-adhoc"
+app = "knotion-meetings"
 kill_signal = "SIGINT"
 kill_timeout = 5
 processes = []

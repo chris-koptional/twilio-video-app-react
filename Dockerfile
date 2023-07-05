@@ -17,12 +17,15 @@ RUN  npm i && npm run build
 
 
 
-FROM gcr.io/distroless/cc-debian10 as host
+FROM alpine:3.14 as host
 
 COPY --from=backend /usr/src/adhoc/server /usr/local/bin/server
 
 COPY --from=frontend /usr/src/adhoc/build /usr/local/bin/build
 
 WORKDIR /usr/local/bin
+
+RUN apk update && apk add ffmpeg && rm -rf /var/cache/apk/*
+
 
 CMD ["server"]
