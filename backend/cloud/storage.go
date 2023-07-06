@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"errors"
 
 	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
@@ -23,4 +24,20 @@ func InjectStorageClient(client *storage.Client) gin.HandlerFunc {
 		c.Set("storage_client", client)
 		c.Next()
 	}
+}
+
+func GetStorageClient(c *gin.Context) (*storage.Client, error) {
+	client, ok := c.Get("storage_client")
+
+	if !ok {
+		return nil, errors.New("Failed to get storage client")
+	}
+
+	taskClient, ok := client.(*storage.Client)
+
+	if !ok {
+		return nil, errors.New("Storage client incorrect type")
+	}
+
+	return taskClient, nil
 }

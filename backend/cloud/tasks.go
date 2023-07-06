@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	taskspb "cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
@@ -42,8 +43,8 @@ type QueueDetails struct {
 
 func CreatePostRecordingTask(client *cloudtasks.Client, callbackURL string, payload any) (*taskspb.Task, error) {
 	queue := QueueDetails{
-		ProjectID: "knotion-adhoc",
-		Location:  "southamerica-east1",
+		ProjectID: os.Getenv("PROJECT_ID"),
+		Location:  "us-east4",
 		Name:      "post-recording",
 	}
 	task := TaskOptions{
@@ -103,7 +104,7 @@ func create_secret_JSON() []byte {
 	credentialType := os.Getenv("CREDENTIAL_TYPE")
 	projectId := os.Getenv("PROJECT_ID")
 	privateKeyID := os.Getenv("PRIVATE_KEY_ID")
-	privateKey := os.Getenv("PRIVATE_KEY")
+	privateKey := strings.ReplaceAll(os.Getenv("PRIVATE_KEY"), "\\n", "\n")
 	clientEmail := os.Getenv("CLIENT_EMAIL")
 	clientID := os.Getenv("CLIENT_ID")
 	authURI := os.Getenv("AUTH_URI")
@@ -143,4 +144,20 @@ func CreateClient() (*cloudtasks.Client, error) {
 
 	opts := option.WithCredentialsJSON(credentials)
 	return cloudtasks.NewClient(ctx, opts)
+}
+
+func GetTaskClient(c *gin.Context) (*cloudtasks.Client, error) {
+	client, ok := c.Get("task_client")
+
+	if !ok {
+		return nil, errors.New("Failed to get task client")
+	}
+
+	taskClient, ok := client.(*cloudtasks.Client)
+
+	if !ok {
+		return nil, errors.New("Task client incorrect type")
+	}
+
+	return taskClient, nil
 }

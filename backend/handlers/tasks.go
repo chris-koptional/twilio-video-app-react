@@ -7,32 +7,36 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"server/cloud"
 	openai "server/openAI"
 	"server/twilio"
 	"sync"
 
-	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
 )
 
+type TranscribeRecordingTaskPayload struct {
+	ID string `json:"id"`
+}
+
 // /api/tasks/createTranscription
 func handleTranscribeRecording(c *gin.Context) {
-	gcp_storage, ok := c.Get("storage_client")
 
-	if !ok {
-		fmt.Println("Could not get storage client")
-		c.JSON(http.StatusFailedDependency, gin.H{
-			"error": "Could not get storage client",
+	storageClient, err := cloud.GetStorageClient(c)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get storage client.",
 		})
 		return
 	}
 
-	storageClient, ok := gcp_storage.(*storage.Client)
+	taskClient, err := cloud.GetTaskClient(c)
 
-	if !ok {
-		fmt.Println("Could not get storage client")
-		c.JSON(http.StatusFailedDependency, gin.H{
-			"error": "Storage client error",
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get task client.",
 		})
 		return
 	}
@@ -96,14 +100,23 @@ func handleTranscribeRecording(c *gin.Context) {
 
 				fileName := fmt.Sprintf("recording-%s_00%d.mp3", recordingId, i)
 				fmt.Println("Getting transcription ", i)
-				transcription, _ := openai.GetVideoTranscription(fileName)
-
+				transcription, e := openai.GetVideoTranscription(fileName)
+				if e != nil {
+					err = e
+				}
 				results[i] = transcription
 				twilio.DeleteLocalRecording(fileName)
 				wg.Done()
 			}(i)
 		}
 		wg.Wait()
+
+		if err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
 		for _, transcript := range results {
 			completeTranscription += transcript
 		}
@@ -111,12 +124,8 @@ func handleTranscribeRecording(c *gin.Context) {
 		filename := fmt.Sprintf("recording-%s.mp3", recordingId)
 		completeTranscription, _ = openai.GetVideoTranscription(filename)
 
-		err = twilio.DeleteLocalRecording(recordingId)
+		twilio.DeleteLocalRecording(filename)
 	}
-
-	// if err != nil {
-	// 	fmt.Println("Failed to delete file after transcription")
-	// }
 
 	wc := storageClient.Bucket("knotion_transcriptions").Object(fmt.Sprintf("%s.txt", recordingId)).NewWriter(c)
 
@@ -129,6 +138,30 @@ func handleTranscribeRecording(c *gin.Context) {
 	if err := wc.Close(); err != nil {
 		log.Fatalf("Failed to close writer: %v", err)
 	}
+
+	baseURL := os.Getenv("FLY_APP_DOMAIN")
+
+	updateNotionTranscriptURL := fmt.Sprintf("%s/api/tasks/updateNotionTranscript", baseURL)
+	getSummaryURL := fmt.Sprintf("%s/api/tasks/getSummary", baseURL)
+	taskPayload := TranscribeRecordingTaskPayload{recordingId}
+
+	_, err = cloud.CreatePostRecordingTask(taskClient, updateNotionTranscriptURL, taskPayload)
+	if err != nil {
+		c.JSON(http.StatusFailedDependency, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	_, err = cloud.CreatePostRecordingTask(taskClient, getSummaryURL, taskPayload)
+
+	if err != nil {
+		c.JSON(http.StatusFailedDependency, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusAccepted, gin.H{
 		"transcription": "Stored in cloud",
 	})
