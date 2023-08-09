@@ -227,3 +227,31 @@ func SplitRecording(id string) error {
 	return nil
 
 }
+
+func GetTwilioClient(c *gin.Context) (*twilio.RestClient, error) {
+
+	val, ok := c.Get("video_client")
+
+	if !ok {
+		fmt.Println("Failed to get video client")
+		return nil, errors.New("Failed to get video client.")
+	}
+
+	client, ok := val.(*twilio.RestClient)
+
+	if !ok {
+		fmt.Println("Improper video client")
+		return nil, errors.New("Improper video client.")
+	}
+	return client, nil
+}
+
+func GetUniqueRoomName(c *twilio.RestClient, sid string) (string, error) {
+	room, err := c.VideoV1.FetchRoom(sid)
+
+	if err != nil {
+		return "", err
+	}
+
+	return *room.UniqueName, nil
+}

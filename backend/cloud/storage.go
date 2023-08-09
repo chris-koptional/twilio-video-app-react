@@ -3,6 +3,9 @@ package cloud
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"os"
 
 	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
@@ -40,4 +43,31 @@ func GetStorageClient(c *gin.Context) (*storage.Client, error) {
 	}
 
 	return taskClient, nil
+}
+
+func GetTranscriptionObject(c *gin.Context, documentId string) (string, error) {
+
+	client, err := GetStorageClient(c)
+
+	if err != nil {
+		return "", err
+	}
+
+	bucket := os.Getenv("TRANSCRIPTION_BUCKET")
+
+	r, err := client.Bucket(bucket).Object(documentId + ".txt").NewReader(c)
+
+	if err != nil {
+		fmt.Println("Failed to create reader.")
+		return "", err
+	}
+	defer r.Close()
+
+	transcript, err := ioutil.ReadAll(r)
+	if err != nil {
+		fmt.Println("Failed to read file contents.")
+		return "", err
+	}
+
+	return string(transcript), nil
 }

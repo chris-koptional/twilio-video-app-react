@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"server/cloud"
 	queue "server/cloud"
 	"server/twilio"
 
-	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"github.com/gin-gonic/gin"
 	t "github.com/twilio/twilio-go"
 )
@@ -81,16 +81,39 @@ func handleTwilioTokenCreation(c *gin.Context) {
 }
 
 type CompositionCallback struct {
-	CompositionSid      string `json:"CompositionSid,omitempty"`
-	StatusCallbackEvent string `json:"StatusCallbackEvent,omitempty"`
+	CompositionSid      string `form:"CompositionSid,omitempty"`
+	StatusCallbackEvent string `form:"StatusCallbackEvent,omitempty"`
+	RoomSID             string `form:"RoomSid,omitempty"`
+}
+
+type CompositionTaskPayload struct {
+	CompositionSid string `json:"id,omitempty"`
+	RoomName       string `json:"roomname"`
 }
 
 func handleCompositionCallback(c *gin.Context) {
+	twilioClient, err := twilio.GetTwilioClient(c)
 
-	var payload CompositionCallback
+	if err != nil {
+		c.JSON(http.StatusFailedDependency, gin.H{
+			"errors": "Failed to get video rest client",
+		})
+		return
+	}
 
-	if err := c.ShouldBind(&payload); err != nil {
+	payload := CompositionCallback{
+		c.Request.FormValue("CompositionSid"),
+		c.Request.FormValue("StatusCallbackEvent"),
+		c.Request.FormValue("RoomSid"),
+	}
+
+	fmt.Println(fmt.Sprintf("CompId:%s  Status: %s  RoomId: %s", payload.CompositionSid, payload.StatusCallbackEvent, payload.RoomSID))
+
+	if err := c.ShouldBindQuery(&payload); err != nil {
 		// Handle error
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Improper payload",
+		})
 		fmt.Println("Could not bind payload")
 	}
 
@@ -102,20 +125,13 @@ func handleCompositionCallback(c *gin.Context) {
 	}
 	fmt.Println(payload, payload.CompositionSid, "COMPOSITION SID")
 
-	client, ok := c.Get("task_client")
+	roomName, err := twilio.GetUniqueRoomName(twilioClient, payload.RoomSID)
 
-	if !ok {
+	taskClient, err := cloud.GetTaskClient(c)
+
+	if err != nil {
 		c.JSON(http.StatusFailedDependency, gin.H{
-			"error": "GCP client not found.",
-		})
-		return
-	}
-
-	gcpClient, ok := client.(*cloudtasks.Client)
-
-	if !ok {
-		c.JSON(http.StatusFailedDependency, gin.H{
-			"error": "GCP client not correct type.",
+			"error": "Could not get task client: ." + err.Error(),
 		})
 		return
 	}
@@ -124,7 +140,11 @@ func handleCompositionCallback(c *gin.Context) {
 
 	url := fmt.Sprintf("%s/api/tasks/createTranscription", baseURL)
 
-	queue.CreatePostRecordingTask(gcpClient, url, payload)
+	taskPayload := CompositionTaskPayload{
+		payload.CompositionSid,
+		roomName,
+	}
+	queue.CreatePostRecordingTask(taskClient, url, taskPayload)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Callback received",

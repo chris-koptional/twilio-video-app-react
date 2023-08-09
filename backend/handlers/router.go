@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"server/cloud"
 	t "server/twilio"
 
@@ -33,7 +36,17 @@ func SetupRouter(taskClient *cloudtasks.Client, videoClient *twilio.RestClient, 
 
 	router.POST("/api/status/composition", handleCompositionCallback)
 
+	// tasks
 	router.POST("/api/tasks/createTranscription", handleTranscribeRecording)
+	router.POST("/api/tasks/getSummary", handleSummarizeTranscript)
+	router.POST("/api/tasks/updateSummary", func(c *gin.Context) {
+		body, _ := ioutil.ReadAll(c.Request.Body)
 
+		fmt.Println(string(body))
+
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "not implemented yet",
+		})
+	})
 	return router
 }
