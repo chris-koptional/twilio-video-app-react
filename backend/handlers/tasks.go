@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"server/cloud"
@@ -22,32 +21,10 @@ type TranscribeRecordingTaskPayload struct {
 type GetSummaryTaskPayload struct {
 	ID       string `json:"id"`
 	RoomName string `json:"roomname"`
-	Summary  string `json:"summary"`
 }
 
 // /api/tasks/createTranscription
-func handleTranscribeRecording(c *gin.Context) {
-
-	storageClient, err := cloud.GetStorageClient(c)
-
-	if err != nil {
-		fmt.Println("Failed to get storage client.")
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get storage client.",
-		})
-		return
-	}
-
-	taskClient, err := cloud.GetTaskClient(c)
-
-	if err != nil {
-		fmt.Println("Failed to get task client.")
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to get task client.",
-		})
-		return
-	}
-
+func (h *Handler) handleTranscribeRecording(c *gin.Context) {
 	var payload CompositionTaskPayload
 
 	if err := c.ShouldBindJSON(&payload); err != nil {
@@ -143,10 +120,10 @@ func handleTranscribeRecording(c *gin.Context) {
 		twilio.DeleteLocalRecording(filename)
 	}
 
-	wc := storageClient.Bucket("knotion_transcriptions").Object(fmt.Sprintf("%s.txt", recordingId)).NewWriter(c)
+	wc := h.StorageClient.Bucket("knotion_transcriptions").Object(fmt.Sprintf("%s.txt", recordingId)).NewWriter(c)
 
 	fileContent := []byte(completeTranscription)
-	fileReader := ioutil.NopCloser(bytes.NewReader(fileContent))
+	fileReader := io.NopCloser(bytes.NewReader(fileContent))
 
 	if _, err = io.Copy(wc, fileReader); err != nil {
 		fmt.Println("Failed to copy conent to writer")
@@ -169,7 +146,7 @@ func handleTranscribeRecording(c *gin.Context) {
 	getSummaryURL := fmt.Sprintf("%s/api/tasks/getSummary", baseURL)
 	taskPayload := TranscribeRecordingTaskPayload{recordingId, payload.RoomName}
 
-	_, err = cloud.CreatePostRecordingTask(taskClient, updateNotionTranscriptURL, taskPayload)
+	_, err = cloud.CreatePostRecordingTask(h.TaskClient, updateNotionTranscriptURL, taskPayload)
 	if err != nil {
 		fmt.Println("Failed to update notion transcript task")
 		c.JSON(http.StatusFailedDependency, gin.H{
@@ -178,7 +155,7 @@ func handleTranscribeRecording(c *gin.Context) {
 		return
 	}
 
-	_, err = cloud.CreatePostRecordingTask(taskClient, getSummaryURL, taskPayload)
+	_, err = cloud.CreatePostRecordingTask(h.TaskClient, getSummaryURL, taskPayload)
 
 	if err != nil {
 		fmt.Println("Failed to get summary task")
@@ -193,18 +170,10 @@ func handleTranscribeRecording(c *gin.Context) {
 	})
 }
 
-func handleSummarizeTranscript(c *gin.Context) {
+func (h *Handler) handleSummarizeTranscript(c *gin.Context) {
 	var payload TranscribeRecordingTaskPayload
-	taskClient, err := cloud.GetTaskClient(c)
 
-	if err != nil {
-		c.JSON(http.StatusFailedDependency, gin.H{
-			"error": "Failed to get task client",
-		})
-		return
-	}
-
-	err = c.ShouldBindJSON(&payload)
+	err := c.ShouldBindJSON(&payload)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -213,7 +182,7 @@ func handleSummarizeTranscript(c *gin.Context) {
 		return
 	}
 
-	transcript, err := cloud.GetTranscriptionObject(c, payload.ID)
+	transcript, err := cloud.GetTranscriptionObject(h.StorageClient, payload.ID)
 
 	if err != nil {
 		c.JSON(http.StatusFailedDependency, gin.H{
@@ -229,14 +198,35 @@ func handleSummarizeTranscript(c *gin.Context) {
 		})
 		return
 	}
+
+	wc := h.StorageClient.Bucket("knotion_summaries").Object(fmt.Sprintf("%s.txt", payload.ID)).NewWriter(c)
+
+	fileContent := []byte(summary)
+	fileReader := io.NopCloser(bytes.NewReader(fileContent))
+
+	if _, err = io.Copy(wc, fileReader); err != nil {
+		fmt.Println("Failed to copy conent to writer")
+		c.JSON(http.StatusFailedDependency, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+	if err := wc.Close(); err != nil {
+		fmt.Println("Failed to close writer")
+		c.JSON(http.StatusFailedDependency, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
 	baseURL := os.Getenv("FLY_APP_DOMAIN")
 	taskURL := fmt.Sprintf("%s/api/tasks/updateSummary", baseURL)
+
 	taskPayload := GetSummaryTaskPayload{
 		ID:       payload.ID,
-		Summary:  summary,
 		RoomName: payload.RoomName,
 	}
-	_, err = cloud.CreatePostRecordingTask(taskClient, taskURL, taskPayload)
+	_, err = cloud.CreatePostRecordingTask(h.TaskClient, taskURL, taskPayload)
 
 	if err != nil {
 		c.JSON(http.StatusFailedDependency, gin.H{

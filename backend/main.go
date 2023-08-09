@@ -36,12 +36,13 @@ func main() {
 	}
 	defer storageClient.Close()
 
-	// setup all of the routes
-	r := handler.SetupRouter(
+	h := handler.NewHandler(
 		taskClient,
 		twilioClient,
 		storageClient,
 	)
+	// setup all of the routes
+	r := h.SetupRouter()
 
 	// Start the server
 	if err := r.Run(":8080"); err != nil {

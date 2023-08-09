@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/twilio/twilio-go"
 	"github.com/twilio/twilio-go/client/jwt"
 	openapi "github.com/twilio/twilio-go/rest/video/v1"
@@ -24,22 +23,6 @@ type VideoLayout struct {
 
 type Grid struct {
 	VideoSources []string `json:"video_sources"`
-}
-
-func InjectTwilioClient(client *twilio.RestClient) gin.HandlerFunc {
-
-	err := CreateCompositionHook(client)
-
-	if err != nil {
-		fmt.Println("Failed to create composition hook!")
-	} else {
-		fmt.Println("Created Composition Hook")
-	}
-
-	return func(c *gin.Context) {
-		c.Set("video_client", client)
-		c.Next()
-	}
 }
 
 func InitTwilioClient() *twilio.RestClient {
@@ -226,24 +209,6 @@ func SplitRecording(id string) error {
 	}
 	return nil
 
-}
-
-func GetTwilioClient(c *gin.Context) (*twilio.RestClient, error) {
-
-	val, ok := c.Get("video_client")
-
-	if !ok {
-		fmt.Println("Failed to get video client")
-		return nil, errors.New("Failed to get video client.")
-	}
-
-	client, ok := val.(*twilio.RestClient)
-
-	if !ok {
-		fmt.Println("Improper video client")
-		return nil, errors.New("Improper video client.")
-	}
-	return client, nil
 }
 
 func GetUniqueRoomName(c *twilio.RestClient, sid string) (string, error) {

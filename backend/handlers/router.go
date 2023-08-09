@@ -2,10 +2,8 @@ package handler
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
-	"server/cloud"
-	t "server/twilio"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/storage"
@@ -14,15 +12,24 @@ import (
 	"github.com/twilio/twilio-go"
 )
 
-func SetupRouter(taskClient *cloudtasks.Client, videoClient *twilio.RestClient, storageClient *storage.Client) *gin.Engine {
+type Handler struct {
+	TaskClient    *cloudtasks.Client
+	VideoClient   *twilio.RestClient
+	StorageClient *storage.Client
+}
+
+func NewHandler(taskClient *cloudtasks.Client, videoClient *twilio.RestClient, storageClient *storage.Client) *Handler {
+	return &Handler{
+		TaskClient:    taskClient,
+		VideoClient:   videoClient,
+		StorageClient: storageClient,
+	}
+}
+
+func (h *Handler) SetupRouter() *gin.Engine {
 
 	router := gin.Default()
 
-	// defer client.Close()
-
-	router.Use(cloud.Inject_gcp_client(taskClient))
-	router.Use(t.InjectTwilioClient(videoClient))
-	router.Use(cloud.InjectStorageClient(storageClient))
 	// serve the react application
 	router.Use(static.Serve("/", static.LocalFile("./build", true)))
 	// Serve index.html for all non-API routes
@@ -31,16 +38,16 @@ func SetupRouter(taskClient *cloudtasks.Client, videoClient *twilio.RestClient, 
 	})
 
 	// Twilio API
-	router.POST("/api/room/create", handleTwilioRoomCreation)
-	router.POST("/api/room/connect", handleTwilioTokenCreation)
+	router.POST("/api/room/create", h.handleTwilioRoomCreation)
+	router.POST("/api/room/connect", h.handleTwilioTokenCreation)
 
-	router.POST("/api/status/composition", handleCompositionCallback)
+	router.POST("/api/status/composition", h.handleCompositionCallback)
 
 	// tasks
-	router.POST("/api/tasks/createTranscription", handleTranscribeRecording)
-	router.POST("/api/tasks/getSummary", handleSummarizeTranscript)
+	router.POST("/api/tasks/createTranscription", h.handleTranscribeRecording)
+	router.POST("/api/tasks/getSummary", h.handleSummarizeTranscript)
 	router.POST("/api/tasks/updateSummary", func(c *gin.Context) {
-		body, _ := ioutil.ReadAll(c.Request.Body)
+		body, _ := io.ReadAll(c.Request.Body)
 
 		fmt.Println(string(body))
 

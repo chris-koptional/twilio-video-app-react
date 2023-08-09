@@ -11,7 +11,6 @@ import (
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	taskspb "cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
-	"github.com/gin-gonic/gin"
 	"google.golang.org/api/option"
 )
 
@@ -90,15 +89,6 @@ func createHTTPTask(client *cloudtasks.Client, task TaskOptions) (*taskspb.Task,
 	return createdTask, nil
 }
 
-func Inject_gcp_client(client *cloudtasks.Client) gin.HandlerFunc {
-
-	return func(c *gin.Context) {
-		c.Set("task_client", client)
-		c.Next()
-		// defer client.Close()
-	}
-}
-
 func create_secret_JSON() []byte {
 
 	credentialType := os.Getenv("CREDENTIAL_TYPE")
@@ -144,20 +134,4 @@ func CreateClient() (*cloudtasks.Client, error) {
 
 	opts := option.WithCredentialsJSON(credentials)
 	return cloudtasks.NewClient(ctx, opts)
-}
-
-func GetTaskClient(c *gin.Context) (*cloudtasks.Client, error) {
-	client, ok := c.Get("task_client")
-
-	if !ok {
-		return nil, errors.New("Failed to get task client")
-	}
-
-	taskClient, ok := client.(*cloudtasks.Client)
-
-	if !ok {
-		return nil, errors.New("Task client incorrect type")
-	}
-
-	return taskClient, nil
 }
